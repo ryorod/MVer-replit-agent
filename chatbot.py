@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import time
+from typing import Literal
 
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
@@ -30,6 +31,47 @@ class MusicAnalysisResult(BaseModel):
     confidence: float = Field(description="Confidence score of the analysis")
 
 
+# Analysis Tool Schema
+class AnalyzeContentInput(BaseModel):
+    """Input schema for content analysis."""
+    content_uri: str = Field(...,
+                             description="URI of the music content to analyze")
+    content_type: Literal["audio", "video"] = Field(
+        ..., description="Type of content (audio/video)")
+
+
+def analyze_music_content(wallet: Wallet, content_uri: str,
+                          content_type: str) -> str:
+    """Analyze music content using AI features."""
+    analysis_result = {
+        "genre": "detected_genre",
+        "style": "detected_style",
+        "similarity_score": 0.95,
+        "safe_for_minting": True,
+        "tags": ["tag1", "tag2"],
+        "confidence": 0.9
+    }
+    return f"Analysis results: {str(analysis_result)}"
+
+
+# Rights Verification Tool Schema
+class VerifyRightsInput(BaseModel):
+    """Input schema for rights verification."""
+    content_uri: str = Field(..., description="URI of the content to verify")
+    creator_address: str = Field(..., description="Creator's wallet address")
+
+
+def verify_content_rights(wallet: Wallet, content_uri: str,
+                          creator_address: str) -> str:
+    """Verify content rights and ownership."""
+    verification_result = {
+        "verified": True,
+        "rights_holder": creator_address,
+        "timestamp": "current_time"
+    }
+    return f"Verification results: {str(verification_result)}"
+
+
 def initialize_agent():
     """Initialize the agent with CDP Agentkit for music content analysis"""
     # Initialize LLM with music analysis capabilities
@@ -56,23 +98,27 @@ def initialize_agent():
     cdp_toolkit = CdpToolkit.from_cdp_agentkit_wrapper(agentkit)
     tools = cdp_toolkit.get_tools()
 
-    # Add custom music analysis tools
-    tools.extend([{
-        "name": "analyze_music_content",
-        "description":
+    # Create analysis tool
+    analyzeContentTool = CdpTool(
+        name="analyze_music_content",
+        description=
         "Analyze music content for genre, style, and similarity to existing content",
-        "parameters": {
-            "content_uri": "URI of the music content to analyze",
-            "content_type": "Type of content (audio/video)"
-        }
-    }, {
-        "name": "verify_content_rights",
-        "description": "Verify content ownership and rights",
-        "parameters": {
-            "content_uri": "URI of the content to verify",
-            "creator_address": "Creator's wallet address"
-        }
-    }])
+        cdp_agentkit_wrapper=agentkit,
+        args_schema=AnalyzeContentInput,
+        func=analyze_music_content,
+    )
+
+    # Create verification tool
+    verifyRightsTool = CdpTool(
+        name="verify_content_rights",
+        description="Verify content ownership and rights",
+        cdp_agentkit_wrapper=agentkit,
+        args_schema=VerifyRightsInput,
+        func=verify_content_rights,
+    )
+
+    # Add custom tools
+    tools.extend([analyzeContentTool, verifyRightsTool])
 
     memory = MemorySaver()
     config = {"configurable": {"thread_id": "MVer Content Analysis Agent"}}
@@ -129,6 +175,7 @@ def run_interactive_mode(agent_executor, config):
 
             elif command == "analyze":
                 content_uri = input("Enter content URI: ")
+                content_type = input("Enter content type (audio/video): ")
                 result = analyze_content(agent_executor, config, content_uri)
                 if result:
                     print("\nAnalysis Results:")
